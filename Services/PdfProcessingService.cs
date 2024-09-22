@@ -1,9 +1,9 @@
-﻿using ECMDocumentHelper.Helpers;
+﻿
+using ECMDocumentHelper.Helpers;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 
 namespace ECMDocumentHelper.Services
 {
@@ -22,56 +22,65 @@ namespace ECMDocumentHelper.Services
             _logger = logger;
         }
 
-        public async Task<(int StatusCode, string Message, string OutputPath)> GeneratePDFAsync(List<string> filePaths)
+        public (int StatusCode, string Message, string OutputPath) GeneratePDF(List<string> filePaths)
         {
-            string outputFilePath = string.Empty;
+            //foreach (var filePath in filePaths)
+            //{
+            //    try
+            //    {
+            //        string extension = Path.GetExtension(filePath)?.ToLowerInvariant();
+            //        string outputFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + ".pdf");
+
+            //        switch (extension)
+            //        {
+            //            case ".docx":
+            //            case ".doc":
+            //                _officeInteropHelper.ConvertWordToPdf(filePath, outputFilePath);
+            //                break;
+
+            //            case ".pptx":
+            //            case ".ppt":
+            //                _officeInteropHelper.ConvertPowerPointToPdf(filePath, outputFilePath);
+            //                break;
+
+            //            case ".msg":
+            //                _officeInteropHelper.ConvertOutlookMsgToPdf(filePath, outputFilePath);
+            //                break;
+
+            //            case ".png":
+            //            case ".jpg":
+            //            case ".jpeg":
+            //                _imageHelper.ConvertImageToPdf(filePath, outputFilePath);
+            //                break;
+
+            //            default:
+            //                _logger.LogWarning("Unsupported file format: {FilePath}", filePath);
+            //                return (0, "Unsupported file format.", null);
+            //        }
+
+            //        return (1, "Files processed successfully.", outputFilePath);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        _logger.LogError(ex, "Error processing file: {FilePath}", filePath);
+            //        return (0, $"Error processing file: {filePath}", null);
+            //    }
+            //}
+            return (1, "Files processed successfully.", null);
+        }
+
+        public (int StatusCode, string Message, string OutputPath) ImprintBarcodeOnPdf(string filePath, string barcodeText, string regNumber)
+        {
             try
             {
-                foreach (var filePath in filePaths)
-                {
-                    string extension = Path.GetExtension(filePath)?.ToLowerInvariant();
-                    outputFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + ".pdf");
-
-                    switch (extension)
-                    {
-                        case ".docx":
-                        case ".doc":
-                            await _officeInteropHelper.ConvertWordToPdfAsync(filePath, outputFilePath);
-                            break;
-
-                        case ".pptx":
-                        case ".ppt":
-                            await _officeInteropHelper.ConvertPowerPointToPdfAsync(filePath, outputFilePath);
-                            break;
-
-                        case ".msg":
-                            await _officeInteropHelper.ConvertOutlookMsgToPdfAsync(filePath, outputFilePath);
-                            break;
-
-                        case ".png":
-                        case ".jpg":
-                        case ".jpeg":
-                            await _imageHelper.ConvertImageToPdfAsync(filePath, outputFilePath);
-                            break;
-
-                        default:
-                            _logger.LogWarning("Unsupported file format: {FilePath}", filePath);
-                            return (0, "Unsupported file format", null);
-                    }
-                }
-
-                return (1, "Files processed successfully.", outputFilePath);
+                var outputFilePath = _barcodeHelper.ImprintBarcodeOnPdf(filePath, barcodeText, regNumber);
+                return (1, "Barcode imprinted successfully.", outputFilePath);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing file: {FilePath}", outputFilePath);
-                return (0, "Error processing files", null);
+                _logger.LogError(ex, "Error imprinting barcode on PDF: {FilePath}", filePath);
+                return (0, "Error imprinting barcode on PDF.", ex.Message);
             }
-        }
-
-        public async Task<(int StatusCode, string Message, string OutputPath)> ImprintBarcodeOnPdfAsync(string filePath, string barcodeText)
-        {
-            return await _barcodeHelper.ImprintBarcodeOnPdf(filePath, barcodeText);                
         }
     }
 }

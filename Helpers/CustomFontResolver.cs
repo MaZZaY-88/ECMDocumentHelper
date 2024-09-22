@@ -20,6 +20,10 @@ namespace ECMDocumentHelper.Helpers
             {
                 return new FontResolverInfo("LibreBarcode128Text");
             }
+            if (familyName.Equals("LiberationSans", StringComparison.OrdinalIgnoreCase))
+            {
+                return new FontResolverInfo("LiberationSans");
+            }
 
             return null;
         }
@@ -30,6 +34,12 @@ namespace ECMDocumentHelper.Helpers
             if (faceName == "LibreBarcode128Text")
             {
                 string fontPath = Path.Combine(_fontDirectory, "LibreBarcode128Text-Regular.ttf"); // Path to your font file
+                return File.ReadAllBytes(fontPath);
+            }
+
+            if (faceName == "LiberationSans")
+            {
+                string fontPath = Path.Combine(_fontDirectory, "LiberationSans-Regular.ttf"); // Path to your font file
                 return File.ReadAllBytes(fontPath);
             }
 
