@@ -1,0 +1,6 @@
+@ECMDocumentHelper_HostAddress = http://localhost:5157
+
+GET {{ECMDocumentHelper_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
