@@ -1,48 +1,28 @@
-using PdfSharp.Fonts;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
-using Serilog;
-using System;
-using System.IO;
 using ECMDocumentHelper.Helpers;
+using ECMDocumentHelper.Services;
+using Microsoft.Extensions.DependencyInjection;
+using PdfSharp.Fonts;
 
-public class Program
-{
-    public static void Main(string[] args)
-    {
-        // Ensure Logs directory exists
-        Directory.CreateDirectory("Logs");
+var builder = WebApplication.CreateBuilder(args);
 
-        // Configure Serilog for file, console, and debug logging
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .WriteTo.Debug()
-            .WriteTo.File("Logs/ECMDocumentHelper-.log", rollingInterval: RollingInterval.Day) // File logging
-            .CreateLogger();
 
-        // Set the font resolver globally
-       GlobalFontSettings.FontResolver = new CustomFontResolver("Fonts"); // Replace "Fonts" with the actual directory where you stored the font file
+// Add controllers
+// Add services to the container.
+builder.Services.AddControllers();
 
-        try
-        {
-            Log.Information("Starting ECMDocumentHelper application");
-            CreateHostBuilder(args).Build().Run();
-        }
-        catch (Exception ex)
-        {
-            Log.Fatal(ex, "Application startup failed");
-        }
-        finally
-        {
-            Log.CloseAndFlush();
-        }
-    }
+// Register OfficeInteropHelper
+builder.Services.AddScoped<OfficeInteropHelper>();
 
-    public static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .UseSerilog() // Enable Serilog
-            .ConfigureWebHostDefaults(webBuilder =>
-            {
-                webBuilder.UseStartup<Startup>();
-            });
-}
+// Register PdfProcessingService
+builder.Services.AddScoped<PdfProcessingService>();
+
+// Set the font resolver globally
+GlobalFontSettings.FontResolver = new CustomFontResolver("Fonts");
+
+var app = builder.Build();
+
+// Configure HTTP request pipeline
+app.UseRouting();
+app.MapControllers();
+
+app.Run();

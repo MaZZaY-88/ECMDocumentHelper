@@ -1,84 +1,81 @@
-﻿
-using ECMDocumentHelper.Helpers;
-using Microsoft.Extensions.Logging;
+﻿using ECMDocumentHelper.Helpers;
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Security.Cryptography;
 
 namespace ECMDocumentHelper.Services
 {
-    public class PdfProcessingService
+    public class PdfProcessingService : IPdfProcessingService
     {
         private readonly OfficeInteropHelper _officeInteropHelper;
-        private readonly BarcodeHelper _barcodeHelper;
-        private readonly ImageHelper _imageHelper;
-        private readonly ILogger<PdfProcessingService> _logger;
 
-        public PdfProcessingService(OfficeInteropHelper officeInteropHelper, BarcodeHelper barcodeHelper, ImageHelper imageHelper, ILogger<PdfProcessingService> logger)
+        public PdfProcessingService(OfficeInteropHelper officeInteropHelper)
         {
             _officeInteropHelper = officeInteropHelper;
-            _barcodeHelper = barcodeHelper;
-            _imageHelper = imageHelper;
-            _logger = logger;
         }
 
-        public (int StatusCode, string Message, string OutputPath) GeneratePDF(List<string> filePaths)
+        // Method to convert a list of files to a single merged PDF
+        public string ConvertFilesToMergedPdf(List<string> filePaths)
         {
-            //foreach (var filePath in filePaths)
-            //{
-            //    try
-            //    {
-            //        string extension = Path.GetExtension(filePath)?.ToLowerInvariant();
-            //        string outputFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + ".pdf");
+            var pdfFiles = new List<string>();
 
-            //        switch (extension)
-            //        {
-            //            case ".docx":
-            //            case ".doc":
-            //                _officeInteropHelper.ConvertWordToPdf(filePath, outputFilePath);
-            //                break;
+            try
+            {
+                foreach (var filePath in filePaths)
+                {
+                    var extension = System.IO.Path.GetExtension(filePath).ToLower();
+                    string pdfFile = null;
 
-            //            case ".pptx":
-            //            case ".ppt":
-            //                _officeInteropHelper.ConvertPowerPointToPdf(filePath, outputFilePath);
-            //                break;
+                    // Convert each file based on its extension
+                    switch (extension)
+                    {
+                        case ".doc":
+                        case ".docx":
+                            pdfFile = _officeInteropHelper.ConvertWordToPdf(filePath);
+                            break;
+                        case ".xls":
+                        case ".xlsx":
+                            pdfFile = _officeInteropHelper.ConvertExcelToPdf(filePath);
+                            break;
+                        case ".ppt":
+                        case ".pptx":
+                            pdfFile = _officeInteropHelper.ConvertPowerPointToPdf(filePath);
+                            break;
+                        case ".msg":
+                            pdfFile = _officeInteropHelper.ConvertOutlookMsgToPdf(filePath);
+                            break;
+                        case ".pdf":
+                            pdfFile = filePath;
+                            break;
+                        default:
+                            throw new NotSupportedException($"Unsupported file format: {filePath}");
+                    }
 
-            //            case ".msg":
-            //                _officeInteropHelper.ConvertOutlookMsgToPdf(filePath, outputFilePath);
-            //                break;
+                    pdfFiles.Add(pdfFile);
+                }
 
-            //            case ".png":
-            //            case ".jpg":
-            //            case ".jpeg":
-            //                _imageHelper.ConvertImageToPdf(filePath, outputFilePath);
-            //                break;
-
-            //            default:
-            //                _logger.LogWarning("Unsupported file format: {FilePath}", filePath);
-            //                return (0, "Unsupported file format.", null);
-            //        }
-
-            //        return (1, "Files processed successfully.", outputFilePath);
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        _logger.LogError(ex, "Error processing file: {FilePath}", filePath);
-            //        return (0, $"Error processing file: {filePath}", null);
-            //    }
-            //}
-            return (1, "Files processed successfully.", null);
+                // Merge all converted PDFs into a single file and return full path
+                var fullOutputPath = _officeInteropHelper.MergePdfFiles(pdfFiles, $"{Guid.NewGuid()}.pdf");
+                return fullOutputPath;
+            }
+            catch (Exception ex)
+            {
+                throw new ApplicationException("Error during PDF processing", ex);
+            }
         }
 
+        // Method to imprint a barcode on a PDF
         public (int StatusCode, string Message, string OutputPath) ImprintBarcodeOnPdf(string filePath, string barcodeText, string regNumber)
         {
             try
             {
-                var outputFilePath = _barcodeHelper.ImprintBarcodeOnPdf(filePath, barcodeText, regNumber);
+
+                var outputFilePath = _officeInteropHelper.ImprintBarcodeOnPdf(filePath, barcodeText, regNumber);
                 return (1, "Barcode imprinted successfully.", outputFilePath);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error imprinting barcode on PDF: {FilePath}", filePath);
+
                 return (0, "Error imprinting barcode on PDF.", ex.Message);
             }
         }

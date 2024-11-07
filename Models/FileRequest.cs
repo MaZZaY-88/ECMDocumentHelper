@@ -2,6 +2,6 @@
 {
     public class FileRequest
     {
-        public List<string> FilePaths { get; set; }
+        public string FilePath { get; set; }  // The path to the file that needs to be converted
     }
 }
