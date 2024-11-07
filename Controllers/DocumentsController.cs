@@ -7,6 +7,7 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using ECMDocumentHelper.Helpers;
 using DocumentFormat.OpenXml;
+using System.Text;
 
 namespace ECMDocumentHelper.Controllers
 {
@@ -112,88 +113,121 @@ namespace ECMDocumentHelper.Controllers
         [HttpPost("generateword")]
         public IActionResult GenerateWord([FromBody] WordTemplateRequest request)
         {
-            int statusCode = 0; // Код статуса выполнения (1 - успех, 0 - ошибка)
-            string message = string.Empty; // Сообщение о результате работы
-            string outputPath = string.Empty; // Путь до результирующего файла
+            int statusCode = 0; // Execution status code (1 - success, 0 - error)
+            string message = string.Empty; // Result message
+            string outputPath = string.Empty; // Path to the resulting file
 
             try
             {
-                // Проверка существования файла шаблона
+                // Check if the template file exists
                 if (!System.IO.File.Exists(request.Template))
                 {
                     statusCode = 0;
-                    message = "Шаблон не найден.";
+                    message = "Template not found.";
                     return NotFound(new { statusCode, message });
                 }
 
-                // Генерация пути для сохранения результирующего документа
+                // Generate the path for saving the resulting document
                 string templateDirectory = Path.GetDirectoryName(request.Template);
                 string templateFileName = Path.GetFileNameWithoutExtension(request.Template);
                 string templateExtension = Path.GetExtension(request.Template);
                 outputPath = Path.Combine(templateDirectory, $"{Guid.NewGuid()}_Result{templateExtension}");
 
-                // Копирование шаблона в новый файл для сохранения исходного шаблона неизменным
+                // Copy the template to a new file to keep the original template unchanged
                 System.IO.File.Copy(request.Template, outputPath, true);
 
-                // Открытие Word-документа для редактирования
+                // Open the Word document for editing
                 using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(outputPath, true))
                 {
-                    // Получение тела основного документа
+                    // Get the main document body
                     var body = wordDoc.MainDocumentPart.Document.Body;
 
-                    // Проход по всем текстовым элементам в документе
-                    foreach (var text in body.Descendants<Text>().ToList())
+                    // Process the list of text elements to combine split tags
+                    var textElements = body.Descendants<Text>().ToList();
+                    StringBuilder combinedText = new StringBuilder();
+                    bool insideTag = false;
+                    List<Text> elementsToRemove = new List<Text>();
+
+                    for (int i = 0; i < textElements.Count; i++)
                     {
-                        // Проход по всем парам ключ-значение для замены
+                        if (textElements[i].Text.StartsWith("{") && !textElements[i].Text.EndsWith("}"))
+                        {
+                            insideTag = true;
+                            combinedText.Append(textElements[i].Text);
+                            elementsToRemove.Add(textElements[i]);
+                        }
+                        else if (insideTag)
+                        {
+                            combinedText.Append(textElements[i].Text);
+                            elementsToRemove.Add(textElements[i]);
+                            if (textElements[i].Text.EndsWith("}"))
+                            {
+                                insideTag = false;
+                                textElements[i].Text = combinedText.ToString();
+                                combinedText.Clear();
+                                elementsToRemove.Remove(textElements[i]);
+                            }
+                        }
+                    }
+
+                    foreach (var element in elementsToRemove)
+                    {
+                        element.Remove();
+                    }
+
+                    // Iterate over all text elements in the document
+                    foreach (var text in textElements)
+                    {
+                        // Iterate over all key-value pairs for replacement
                         foreach (var item in request.Data)
                         {
-                            // Формирование тега в фигурных скобках
+                            // Create the tag in curly braces
                             string tag = $"{{{item.Key}}}";
 
-                            // Проверка, содержит ли текстовый элемент текущий тег
+                            // Check if the text element contains the current tag
                             if (text.Text.Contains(tag))
                             {
                                 string tagValue = item.Value;
                                 if (item.Value == null)
                                     tagValue = "";
-                                // Разбиваем значение по символу \n
-                                string[] lines = tagValue.Split(new[] { "\\n" }, StringSplitOptions.None);
+                                // Split the value by the \n character
+                                string[] lines = tagValue.Split(new[] { "\n" }, StringSplitOptions.None);
 
-                                // Получаем родительский Run для текущего Text
+                                // Get the parent Run for the current Text
                                 Run parentRun = text.Parent as Run;
 
                                 if (parentRun != null)
                                 {
-                                    // Копируем RunProperties из оригинального Run
+                                    // Copy RunProperties from the original Run
                                     RunProperties runProperties = parentRun.RunProperties != null
                                         ? (RunProperties)parentRun.RunProperties.CloneNode(true)
                                         : new RunProperties();
 
-                                    // Проверяем и устанавливаем цвет шрифта
+                                    // Check and set the font color
                                     Color color = runProperties.Elements<Color>().FirstOrDefault();
 
                                     if (color != null)
                                     {
-                                        // Удаляем существующий элемент Color
+                                        // Remove the existing Color element
                                         color.Remove();
                                     }
 
-                                    // Добавляем новый элемент Color с чёрным цветом
+                                    // Add a new Color element with black color
                                     runProperties.Append(new Color() { Val = "000000" });
 
-                                    // Список новых элементов для вставки
+                                    // List of new elements to insert
                                     List<OpenXmlElement> newElements = new List<OpenXmlElement>();
 
                                     for (int i = 0; i < lines.Length; i++)
                                     {
-                                        // Создаем новый Run с текстом и скопированными RunProperties
+                                        // Create a new Run with the text and copied RunProperties
                                         Run newRun = new Run();
                                         newRun.RunProperties = (RunProperties)runProperties.CloneNode(true);
                                         newRun.AppendChild(new Text(lines[i]));
 
                                         newElements.Add(newRun);
 
-                                        // Добавляем разрыв строки, если это не последний элемент
+                                        // Add a line break if this is not the last element
                                         if (i < lines.Length - 1)
                                         {
                                             Run breakRun = new Run();
@@ -203,44 +237,39 @@ namespace ECMDocumentHelper.Controllers
                                         }
                                     }
 
-                                    // Вставляем новые элементы перед текущим Run
+                                    // Insert new elements before the current Run
                                     foreach (var newElement in newElements)
                                     {
                                         parentRun.Parent.InsertBefore(newElement, parentRun);
                                     }
 
-                                    // Удаляем оригинальный Run
+                                    // Remove the original Run
                                     parentRun.Remove();
                                 }
 
-                                // Переходим к следующему Text элементу, так как текущий был удален
+                                // Move to the next Text element since the current one was removed
                                 break;
                             }
                         }
                     }
 
-                    // Сохранение изменений в документе
+                    // Save changes to the document
                     wordDoc.MainDocumentPart.Document.Save();
                 }
 
-                statusCode = 1; // Успешное выполнение
-                message = "Документ успешно сгенерирован.";
+                statusCode = 1; // Successful execution
+                message = "Document generated successfully.";
             }
             catch (Exception ex)
             {
-                // Обработка исключения и установка сообщения об ошибке
+                // Handle the exception and set the error message
                 statusCode = 0;
-                message = $"Ошибка при генерации документа: {ex.Message}";
+                message = $"Error generating document: {ex.Message}";
             }
 
-            // Возврат результата выполнения
+            // Return the result
             return Ok(new { statusCode, message, outputPath });
         }
 
-
-
-
-
     }
-
 }
