@@ -31,19 +31,19 @@ namespace ECMDocumentHelper.Services
                     {
                         case ".doc":
                         case ".docx":
-                            pdfFile = _officeInteropHelper.ConvertWordToPdf(filePath);
+                            pdfFile = _officeInteropHelper.ConvertToPdfUsingLibreOffice(filePath);
                             break;
                         case ".xls":
                         case ".xlsx":
-                            pdfFile = _officeInteropHelper.ConvertExcelToPdf(filePath);
+                            pdfFile = _officeInteropHelper.ConvertToPdfUsingLibreOffice(filePath);
                             break;
                         case ".ppt":
                         case ".pptx":
-                            pdfFile = _officeInteropHelper.ConvertPowerPointToPdf(filePath);
+                            pdfFile = _officeInteropHelper.ConvertToPdfUsingLibreOffice(filePath);
                             break;
-                        case ".msg":
+                        /*case ".msg":
                             pdfFile = _officeInteropHelper.ConvertOutlookMsgToPdf(filePath);
-                            break;
+                            break;*/
                         case ".pdf":
                             pdfFile = filePath;
                             break;

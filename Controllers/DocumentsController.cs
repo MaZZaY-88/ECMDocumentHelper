@@ -65,7 +65,6 @@ namespace ECMDocumentHelper.Controllers
             }
         }
 
-        // Existing GeneratePDF method (as requested)
         [HttpPost("imprintImage")]
         public IActionResult imprintImage([FromBody] ImageRequest request)
         {

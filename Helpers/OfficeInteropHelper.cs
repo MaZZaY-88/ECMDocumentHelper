@@ -1,17 +1,17 @@
-﻿using ExcelApp = Microsoft.Office.Interop.Excel;
-using OutlookApp = Microsoft.Office.Interop.Outlook;
-using PowerPointApp = Microsoft.Office.Interop.PowerPoint;
-using WordApp = Microsoft.Office.Interop.Word;
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Presentation;
 using Microsoft.Extensions.Configuration;
-using System;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Drawing;
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
 using System.Collections.Generic;
-using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace ECMDocumentHelper.Helpers
 {
@@ -41,11 +41,11 @@ namespace ECMDocumentHelper.Helpers
         {
             string fullOutputPath = Path.Combine(_outputDirectory, outputPdfFileName);
 
-            using (var outputDocument = new PdfSharp.Pdf.PdfDocument())
+            using (var outputDocument = new PdfDocument())
             {
                 foreach (var pdfFile in pdfFilePaths)
                 {
-                    using (var inputDocument = PdfSharp.Pdf.IO.PdfReader.Open(pdfFile, PdfDocumentOpenMode.Import))
+                    using (var inputDocument = PdfReader.Open(pdfFile, PdfDocumentOpenMode.Import))
                     {
                         foreach (var page in inputDocument.Pages)
                         {
@@ -67,7 +67,6 @@ namespace ECMDocumentHelper.Helpers
             {
                 using (PdfDocument document = PdfReader.Open(inputPdfPath, PdfDocumentOpenMode.Modify))
                 {
-
                     double xPosition = 10;
                     double yPosition = 135;
                     int rotation = -90;
@@ -116,27 +115,47 @@ namespace ECMDocumentHelper.Helpers
             }
             catch (Exception ex)
             {
-
                 throw new ApplicationException("Error during barcode imprinting", ex);
             }
         }
 
         public string ConvertWordToPdf(string wordFilePath)
         {
-            var wordApp = new WordApp.Application();
-            WordApp.Document doc = null;
-
-            var outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(wordFilePath)}_{Guid.NewGuid()}.pdf");
+            string outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(wordFilePath)}_{Guid.NewGuid()}.pdf");
 
             try
             {
-                doc = wordApp.Documents.Open(wordFilePath);
-                doc.ExportAsFixedFormat(outputPdfPath, WordApp.WdExportFormat.wdExportFormatPDF);
+                // Use PDFCreator printer to print the document as a PDF
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = wordFilePath;
+                startInfo.Verb = "Print";
+                startInfo.Arguments = $"/D:PDFCreator";
+                startInfo.UseShellExecute = true;
+                startInfo.CreateNoWindow = true;
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                    {
+                        throw new ApplicationException("PDFCreator failed to convert Word to PDF.");
+                    }
+                }
+
+                // Wait for the PDF to be generated
+                string printedPdfPath = Path.Combine(_pdfSaveDirectory, $"{Path.GetFileNameWithoutExtension(wordFilePath)}.pdf");
+                if (File.Exists(printedPdfPath))
+                {
+                    File.Move(printedPdfPath, outputPdfPath);
+                }
+                else
+                {
+                    throw new FileNotFoundException("PDF file was not created by PDFCreator.");
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                doc?.Close();
-                wordApp.Quit();
+                throw new ApplicationException("Error during Word to PDF conversion", ex);
             }
 
             return outputPdfPath;
@@ -144,20 +163,41 @@ namespace ECMDocumentHelper.Helpers
 
         public string ConvertExcelToPdf(string excelFilePath)
         {
-            var excelApp = new ExcelApp.Application();
-            ExcelApp.Workbook workbook = null;
-
-            var outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(excelFilePath)}_{Guid.NewGuid()}.pdf");
+            string outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(excelFilePath)}_{Guid.NewGuid()}.pdf");
 
             try
             {
-                workbook = excelApp.Workbooks.Open(excelFilePath);
-                workbook.ExportAsFixedFormat(ExcelApp.XlFixedFormatType.xlTypePDF, outputPdfPath);
+                // Use PDFCreator printer to print the document as a PDF
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = excelFilePath;
+                startInfo.Verb = "Print";
+                startInfo.Arguments = $"/D:PDFCreator";
+                startInfo.UseShellExecute = true;
+                startInfo.CreateNoWindow = true;
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                    {
+                        throw new ApplicationException("PDFCreator failed to convert Excel to PDF.");
+                    }
+                }
+
+                // Wait for the PDF to be generated
+                string printedPdfPath = Path.Combine(_pdfSaveDirectory, $"{Path.GetFileNameWithoutExtension(excelFilePath)}.pdf");
+                if (File.Exists(printedPdfPath))
+                {
+                    File.Move(printedPdfPath, outputPdfPath);
+                }
+                else
+                {
+                    throw new FileNotFoundException("PDF file was not created by PDFCreator.");
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                workbook?.Close(false);
-                excelApp.Quit();
+                throw new ApplicationException("Error during Excel to PDF conversion", ex);
             }
 
             return outputPdfPath;
@@ -165,89 +205,75 @@ namespace ECMDocumentHelper.Helpers
 
         public string ConvertPowerPointToPdf(string pptFilePath)
         {
-            var pptApp = new PowerPointApp.Application();
-            PowerPointApp.Presentation presentation = null;
-
-            var outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(pptFilePath)}_{Guid.NewGuid()}.pdf");
+            string outputPdfPath = Path.Combine(_outputDirectory, $"{Path.GetFileNameWithoutExtension(pptFilePath)}_{Guid.NewGuid()}.pdf");
 
             try
             {
-                presentation = pptApp.Presentations.Open(pptFilePath, WithWindow: Microsoft.Office.Core.MsoTriState.msoFalse);
-                presentation.SaveAs(outputPdfPath, PowerPointApp.PpSaveAsFileType.ppSaveAsPDF);
+                // Use PDFCreator printer to print the document as a PDF
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = pptFilePath;
+                startInfo.Verb = "Print";
+                startInfo.Arguments = $"/D:PDFCreator";
+                startInfo.UseShellExecute = true;
+                startInfo.CreateNoWindow = true;
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                    {
+                        throw new ApplicationException("PDFCreator failed to convert PowerPoint to PDF.");
+                    }
+                }
+
+                // Wait for the PDF to be generated
+                string printedPdfPath = Path.Combine(_pdfSaveDirectory, $"{Path.GetFileNameWithoutExtension(pptFilePath)}.pdf");
+                if (File.Exists(printedPdfPath))
+                {
+                    File.Move(printedPdfPath, outputPdfPath);
+                }
+                else
+                {
+                    throw new FileNotFoundException("PDF file was not created by PDFCreator.");
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                presentation?.Close();
-                pptApp.Quit();
+                throw new ApplicationException("Error during PowerPoint to PDF conversion", ex);
             }
 
             return outputPdfPath;
         }
-
-        public string ConvertOutlookMsgToPdf(string msgFilePath)
+        public string ConvertToPdfUsingLibreOffice(string inputFilePath)
         {
-            var outlookApp = new OutlookApp.Application();
-            OutlookApp.MailItem mailItem = null;
+            string outputPdfPath = Path.Combine(_outputDirectory, Path.GetFileNameWithoutExtension(inputFilePath) + ".pdf");
 
             try
             {
-                if (!Directory.Exists(_pdfSaveDirectory))
+                // Use LibreOffice to convert the document to PDF
+                ProcessStartInfo startInfo = new ProcessStartInfo
                 {
-                    throw new DirectoryNotFoundException($"The directory {_pdfSaveDirectory} does not exist.");
-                }
+                    FileName = "C:\\Program Files\\LibreOffice\\program\\soffice", // Path to LibreOffice executable (usually soffice)
+                    Arguments = "--headless --convert-to pdf \"" + inputFilePath + "\" --outdir \"" + _outputDirectory + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-                var beforePrintFiles = Directory.GetFiles(_pdfSaveDirectory).ToList();
-
-                SetPDFCreatorAsDefault();
-                mailItem = (OutlookApp.MailItem)outlookApp.Session.OpenSharedItem(msgFilePath);
-                mailItem.PrintOut();
-
-                var printedFilePath = WaitForNewFile(beforePrintFiles, _pdfSaveDirectory);
-                if (string.IsNullOrEmpty(printedFilePath))
+                using (Process process = Process.Start(startInfo))
                 {
-                    throw new FileNotFoundException("No new PDF file was found after printing.");
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                    {
+                        throw new ApplicationException("LibreOffice failed to convert document to PDF.");
+                    }
                 }
-
-                return printedFilePath;
             }
-            finally
+            catch (Exception ex)
             {
-                if (mailItem != null)
-                {
-                    Marshal.ReleaseComObject(mailItem);
-                }
-                Marshal.ReleaseComObject(outlookApp);
-            }
-        }
-
-        private string WaitForNewFile(List<string> beforePrintFiles, string pdfSaveDirectory)
-        {
-            for (int attempt = 0; attempt < 10; attempt++)
-            {
-                var afterPrintFiles = Directory.GetFiles(pdfSaveDirectory).ToList();
-                var printedFiles = afterPrintFiles.Except(beforePrintFiles).ToList();
-
-                if (printedFiles.Count == 1)
-                {
-                    return printedFiles[0];
-                }
-                else if (printedFiles.Count > 1)
-                {
-                    return printedFiles.OrderByDescending(f => File.GetLastWriteTime(f)).First();
-                }
-
-                System.Threading.Thread.Sleep(500);
+                throw new ApplicationException("Error during document to PDF conversion using LibreOffice: " + ex.Message, ex);
             }
 
-            return null;
-        }
-
-        [DllImport("winspool.drv", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern bool SetDefaultPrinter(string Name);
-
-        public static void SetPDFCreatorAsDefault()
-        {
-            SetDefaultPrinter("PDFCreator");
+            return outputPdfPath;
         }
     }
 }

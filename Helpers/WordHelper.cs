@@ -8,20 +8,15 @@ using ZXing.Common;
 using System.Drawing;
 using System.Drawing.Imaging;
 using DocumentFormat.OpenXml;
-using PdfSharp.Drawing;
 using SkiaSharp;
-using ZXing;
 using ZXing.SkiaSharp;
 using ZXing.SkiaSharp.Rendering;
-//using Microsoft.Office.Interop.Word;
-using static System.Net.Mime.MediaTypeNames;
-
 
 namespace ECMDocumentHelper.Helpers
 {
     public class WordHelper
     {
-        public string ReplaceQrTagInWordDocument(string inputDocPath, string qrText)
+        public string ReplaceQrTagInWordDocument(string inputDocPath, string qrText, int qrCodeSize = 100)
         {
             try
             {
@@ -32,18 +27,18 @@ namespace ECMDocumentHelper.Helpers
                 {
                     MainDocumentPart mainPart = wordDoc.MainDocumentPart;
 
-                    // Сгенерировать QR-код
-                    byte[] qrImageBytes = GenerateQrCodeImage(qrText);
+                    // Сгенерировать QR-код с указанным размером
+                    byte[] qrImageBytes = GenerateQrCodeImage(qrText, qrCodeSize);
 
                     // Найти все текстовые элементы в документе
-                    var paragraphs = mainPart.Document.Descendants<Paragraph>();
+                    var paragraphs = mainPart.Document.Body.Descendants<Paragraph>();
 
                     foreach (var paragraph in paragraphs)
                     {
                         var runs = paragraph.Descendants<Run>().ToList();
                         for (int i = 0; i < runs.Count; i++)
                         {
-                            var texts = runs[i].Descendants<DocumentFormat.OpenXml.Drawing.Text>().ToList();
+                            var texts = runs[i].Descendants<Text>().ToList();
                             for (int j = 0; j < texts.Count; j++)
                             {
                                 if (texts[j].Text.Contains("{QR}"))
@@ -54,18 +49,19 @@ namespace ECMDocumentHelper.Helpers
                                     // Создать новый Run для текста до {QR}
                                     if (!string.IsNullOrEmpty(splitTexts[0]))
                                     {
-                                        DocumentFormat.OpenXml.Drawing.Text beforeText = new DocumentFormat.OpenXml.Drawing.Text(splitTexts[0]);
+                                        Text beforeText = new Text(splitTexts[0]);
                                         Run beforeRun = new Run(beforeText);
                                         paragraph.InsertBefore(beforeRun, runs[i]);
                                     }
 
                                     // Добавить изображение QR-кода
-                                    AddImageToBody(mainPart, paragraph, qrImageBytes, (long)2.5 * 360000, (long)2.5 * 360000);
+                                    double qrCodeSizeEmu = qrCodeSize * 914400 / 96; // Convert pixels to EMU
+                                    AddImageToBody(mainPart, paragraph, qrImageBytes, qrCodeSizeEmu, qrCodeSizeEmu);
 
                                     // Создать новый Run для текста после {QR}
                                     if (splitTexts.Length > 1 && !string.IsNullOrEmpty(splitTexts[1]))
                                     {
-                                        DocumentFormat.OpenXml.Drawing.Text afterText = new DocumentFormat.OpenXml.Drawing.Text(splitTexts[1]);
+                                        Text afterText = new Text(splitTexts[1]);
                                         Run afterRun = new Run(afterText);
                                         paragraph.InsertAfter(afterRun, runs[i]);
                                     }
@@ -86,20 +82,19 @@ namespace ECMDocumentHelper.Helpers
             }
             catch (Exception ex)
             {
-
                 throw new ApplicationException("Ошибка при замене тега QR в Word-файле", ex);
             }
         }
 
-        private byte[] GenerateQrCodeImage(string qrText)
+        private byte[] GenerateQrCodeImage(string qrText, int size)
         {
             var writer = new BarcodeWriter<SKBitmap>
             {
                 Format = BarcodeFormat.QR_CODE,
                 Options = new EncodingOptions
                 {
-                    Height = 100,
-                    Width = 100,
+                    Height = size,
+                    Width = size,
                     Margin = 0
                 },
                 Renderer = new SKBitmapRenderer()
@@ -117,7 +112,6 @@ namespace ECMDocumentHelper.Helpers
             }
         }
 
-
         public string ReplaceTagWithImageInWordDocument(string inputDocPath, string tagToReplace, string imagePath)
         {
             try
@@ -132,34 +126,15 @@ namespace ECMDocumentHelper.Helpers
                     // Читаем изображение из файла
                     byte[] imageBytes = File.ReadAllBytes(imagePath);
 
-                    // Получаем размеры изображения
-                    long imageWidthEmu;
-                    long imageHeightEmu;
-                    using (var imageStream = new MemoryStream(imageBytes))
-                    {
-                        using (var bitmap = SKBitmap.Decode(imageStream))
-                        {
-                            // Конвертируем пиксели в EMU
-                            const int emusPerInch = 914400;
-                            const int emusPerCm = 360000;
-                            float dpiX = bitmap.Width / (bitmap.Width / 96.0f); // Предполагаем 96 DPI
-                            float dpiY = bitmap.Height / (bitmap.Height / 96.0f);
-
-                            // Рассчитываем размеры в EMU
-                            imageWidthEmu = (long)(bitmap.Width / dpiX * emusPerInch);
-                            imageHeightEmu = (long)(bitmap.Height / dpiY * emusPerInch);
-                        }
-                    }
-
                     // Найти все абзацы в документе
-                    var paragraphs = mainPart.Document.Descendants<Paragraph>();
+                    var paragraphs = mainPart.Document.Body.Descendants<Paragraph>();
 
                     foreach (var paragraph in paragraphs)
                     {
                         var runs = paragraph.Descendants<Run>().ToList();
                         for (int i = 0; i < runs.Count; i++)
                         {
-                            var texts = runs[i].Descendants<DocumentFormat.OpenXml.Drawing.Text>().ToList();
+                            var texts = runs[i].Descendants<Text>().ToList();
                             for (int j = 0; j < texts.Count; j++)
                             {
                                 if (texts[j].Text.Contains(tagToReplace))
@@ -170,18 +145,18 @@ namespace ECMDocumentHelper.Helpers
                                     // Создаем новый Run для текста до тега
                                     if (!string.IsNullOrEmpty(splitTexts[0]))
                                     {
-                                        DocumentFormat.OpenXml.Drawing.Text beforeText = new DocumentFormat.OpenXml.Drawing.Text(splitTexts[0]);
+                                        Text beforeText = new Text(splitTexts[0]);
                                         Run beforeRun = new Run(beforeText);
                                         paragraph.InsertBefore(beforeRun, runs[i]);
                                     }
 
                                     // Добавляем изображение
-                                    AddImageToBody(mainPart, paragraph, imageBytes, imageWidthEmu, imageHeightEmu);
+                                    AddImageToBody(mainPart, paragraph, imageBytes, 2.5 * 914400, 2.5 * 914400);
 
                                     // Создаем новый Run для текста после тега
                                     if (splitTexts.Length > 1 && !string.IsNullOrEmpty(splitTexts[1]))
                                     {
-                                        DocumentFormat.OpenXml.Drawing.Text afterText = new DocumentFormat.OpenXml.Drawing.Text(splitTexts[1]);
+                                        Text afterText = new Text(splitTexts[1]);
                                         Run afterRun = new Run(afterText);
                                         paragraph.InsertAfter(afterRun, runs[i]);
                                     }
@@ -206,7 +181,7 @@ namespace ECMDocumentHelper.Helpers
             }
         }
 
-        private void AddImageToBody(MainDocumentPart mainPart, Paragraph paragraph, byte[] imageBytes, long imageWidthEmu, long imageHeightEmu)
+        private void AddImageToBody(MainDocumentPart mainPart, Paragraph paragraph, byte[] imageBytes, double imageWidthEmu, double imageHeightEmu)
         {
             var imagePart = mainPart.AddImagePart(ImagePartType.Png);
             using (var stream = new MemoryStream(imageBytes))
@@ -214,7 +189,7 @@ namespace ECMDocumentHelper.Helpers
                 imagePart.FeedData(stream);
             }
 
-            AddImageToParagraph(mainPart.GetIdOfPart(imagePart), paragraph, imageWidthEmu, imageHeightEmu);
+            AddImageToParagraph(mainPart.GetIdOfPart(imagePart), paragraph, (long)imageWidthEmu, (long)imageHeightEmu);
         }
 
         private void AddImageToParagraph(string relationshipId, Paragraph paragraph, long imageWidthEmu, long imageHeightEmu)
@@ -260,23 +235,15 @@ namespace ECMDocumentHelper.Helpers
                                              new DocumentFormat.OpenXml.Drawing.Offset() { X = 0L, Y = 0L },
                                              new DocumentFormat.OpenXml.Drawing.Extents() { Cx = imageWidthEmu, Cy = imageHeightEmu }),
                                          new DocumentFormat.OpenXml.Drawing.PresetGeometry(
-                                             new DocumentFormat.OpenXml.Drawing.AdjustValueList()
-                                         )
+                                             new DocumentFormat.OpenXml.Drawing.AdjustValueList())
                                          { Preset = DocumentFormat.OpenXml.Drawing.ShapeTypeValues.Rectangle }))
                              )
-                             { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" })
+                             { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" }
+                         )
                      )
-                     {
-                         DistanceFromTop = (UInt32Value)0U,
-                         DistanceFromBottom = (UInt32Value)0U,
-                         DistanceFromLeft = (UInt32Value)0U,
-                         DistanceFromRight = (UInt32Value)0U,
-                         EditId = "50D07946"
-                     });
+                 );
 
-            Run run = new Run(element);
-            paragraph.AppendChild(run);
+            paragraph.AppendChild(new Run(element));
         }
     }
-
 }
