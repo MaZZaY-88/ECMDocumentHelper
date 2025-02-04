@@ -115,7 +115,7 @@ namespace ECMDocumentHelper.Helpers
             }
             catch (Exception ex)
             {
-                throw new ApplicationException("Error during barcode imprinting", ex);
+                throw new ApplicationException("Error during barcode imprinting:" + ex.Message, ex);
             }
         }
 

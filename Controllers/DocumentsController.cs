@@ -109,6 +109,7 @@ namespace ECMDocumentHelper.Controllers
                 return StatusCode(500, new { StatusCode = 0, Message = $"Internal server error: {ex.Message}", Details = ex.InnerException?.Message });
             }
         }
+
         [HttpPost("generateword")]
         public IActionResult GenerateWord([FromBody] WordTemplateRequest request)
         {
@@ -118,11 +119,14 @@ namespace ECMDocumentHelper.Controllers
 
             try
             {
+                Logger.LogInformation("Starting GenerateWord method.");
+
                 // Check if the template file exists
                 if (!System.IO.File.Exists(request.Template))
                 {
                     statusCode = 0;
                     message = "Template not found.";
+                    Logger.LogWarning("Template not found: " + request.Template);
                     return NotFound(new { statusCode, message });
                 }
 
@@ -132,12 +136,16 @@ namespace ECMDocumentHelper.Controllers
                 string templateExtension = Path.GetExtension(request.Template);
                 outputPath = Path.Combine(templateDirectory, $"{Guid.NewGuid()}_Result{templateExtension}");
 
+                Logger.LogInformation("Generating output path: " + outputPath);
+
                 // Copy the template to a new file to keep the original template unchanged
                 System.IO.File.Copy(request.Template, outputPath, true);
 
                 // Open the Word document for editing
                 using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(outputPath, true))
                 {
+                    Logger.LogInformation("Opened Word document for editing: " + outputPath);
+
                     // Get the main document body
                     var body = wordDoc.MainDocumentPart.Document.Body;
 
@@ -175,11 +183,18 @@ namespace ECMDocumentHelper.Controllers
                     }
 
                     // Iterate over all text elements in the document
+
+                    foreach (var item in request.Data)
+                    {
+                        Logger.LogInformation($"Processing key: {item.Key}, value: {item.Value}");
+                    }
+
                     foreach (var text in textElements)
                     {
                         // Iterate over all key-value pairs for replacement
                         foreach (var item in request.Data)
                         {
+
                             // Create the tag in curly braces
                             string tag = $"{{{item.Key}}}";
 
@@ -190,7 +205,7 @@ namespace ECMDocumentHelper.Controllers
                                 if (item.Value == null)
                                     tagValue = "";
                                 // Split the value by the \n character
-                                string[] lines = tagValue.Split(new[] { "\n" }, StringSplitOptions.None);
+                                string[] lines = tagValue.Split(new[] { "\\n" }, StringSplitOptions.None);
 
                                 // Get the parent Run for the current Text
                                 Run parentRun = text.Parent as Run;
@@ -254,21 +269,25 @@ namespace ECMDocumentHelper.Controllers
 
                     // Save changes to the document
                     wordDoc.MainDocumentPart.Document.Save();
+                    Logger.LogInformation("Document changes saved successfully.");
                 }
 
                 statusCode = 1; // Successful execution
                 message = "Document generated successfully.";
+                Logger.LogInformation(message);
             }
             catch (Exception ex)
             {
                 // Handle the exception and set the error message
                 statusCode = 0;
                 message = $"Error generating document: {ex.Message}";
+                Logger.LogError(message, ex);
             }
 
             // Return the result
             return Ok(new { statusCode, message, outputPath });
         }
+
 
     }
 }
